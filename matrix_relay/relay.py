@@ -18,18 +18,6 @@
 from gyr.server import Application
 from gyr.matrix_objects import MatrixUser, MatrixRoom
 from string import ascii_lowercase, ascii_uppercase
-import json
-import os
-
-# Load configuration and instantiate app
-
-dir_path = os.path.dirname(os.path.realpath(__file__))
-with open(os.path.join(dir_path, "config.json"), "r") as f:
-    config = json.load(f)
-
-
-app = Application(config["homeserver_addr"], config["as_token"])
-api = app.create_api()
 
 # Utility functions
 
@@ -50,8 +38,12 @@ def mxid2localpart(mxid):
 
 
 class ReqHandler:
+    """Attaches handlers to internal wsgi app to relay events."""
 
     def __init__(self, config):
+        self.config = config
+        self.app = Application(config["homeserver_addr"], config["as_token"])
+        self.api = self.app.create_api()
         # {"!source:room": [["@relayed:users"], ["@relayed:to.rooms"]]}
         # An empty list of users indicates all users relayed
         self.links = {}
@@ -59,6 +51,9 @@ class ReqHandler:
         self.users = {}
 
         self._process_links(config["relay"])
+        self.app.add_handlers(room_handler=self._handle_room,
+                              user_handler=self._handle_user,
+                              transaction_handler=self._handle_txn)
 
     def _process_links(self, links_dict):
         self.links.update(links_dict)
@@ -68,15 +63,15 @@ class ReqHandler:
                 unknown_users = (u for u in val[0] if u not in self.users)
                 for user_id in unknown_users:
                     self.users[user_id] = MatrixUser(
-                        mxid2localpart(user_id), app.create_api
+                        mxid2localpart(user_id), self.app.create_api
                     )
             # Empty list means that all users must be relayed
             else:
-                room = MatrixRoom(source_id, api)
+                room = MatrixRoom(source_id, self.api)
                 unknown_users = (u for u in room.members if u not in self.users)
                 for user_id in unknown_users:
                     self.users[user_id] = MatrixUser(
-                        mxid2localpart(user_id), app.create_api
+                        mxid2localpart(user_id), self.app.create_api
                     )
 
     def _handle_room(room_id):
