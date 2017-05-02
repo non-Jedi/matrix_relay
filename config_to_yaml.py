@@ -15,12 +15,17 @@
 # You should have received a copy of the GNU General Public License
 # along with Matrix Relay.  If not, see
 # <http://www.gnu.org/licenses/>.
+"""Copies config.json in same directory to config.yaml
+
+Since Synapse currently doesn't take json-formatted config, this script is
+necessary
+"""
 
 import json
 import yaml
 import os
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-with open("config.json", "r") as json_config:
-    with open("generated_config.yaml", "w") as yaml_config:
+with open(os.path.join(dir_path, "config.json"), "r") as json_config:
+    with open(os.path.join(dir_path, "config.yaml"), "w") as yaml_config:
         yaml.dump(json.load(json_config), yaml_config)

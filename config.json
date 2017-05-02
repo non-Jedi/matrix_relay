@@ -19,5 +19,10 @@
 		"aliases": []
 	},
 
-	"homeserver_addr": "https://localhost:8448"
+	"homeserver_addr": "https://localhost:8448",
+	"relay": {
+		"!foo:bar": [["@ex:user", "@bar:foo"], ["!bar:example.com", "!bar:fo"]],
+		"!all:users.relayed": [[], ["!to:this.room"]]
+	},
+	"user_prefix": "_relay_"
 }
