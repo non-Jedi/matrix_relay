@@ -17,22 +17,8 @@
 # <http://www.gnu.org/licenses/>.
 from gyr.server import Application
 from gyr.matrix_objects import MatrixUser, MatrixRoom
-from string import ascii_lowercase, ascii_uppercase
+from . import utils
 
-# Utility functions
-
-
-def mxid2localpart(mxid):
-    """Converts mxid of form @localpart:domain to an allowable localpart string.
-
-    Args:
-        mxid(str): The string to convert into allowable localpart.
-    """
-    sub_lower = ["".join(("_", i)) for i in ascii_lowercase]
-    munge_rules = dict(zip(ascii_uppercase, sub_lower))
-    # mxid localparts cannot contain @ or :
-    munge_rules.update({"@": "=40", ":": "=3a"})
-    return mxid.translate(str.maketrans(munge_rules))
 
 # Class that interacts with app
 
@@ -42,28 +28,29 @@ class ReqHandler:
 
     def __init__(self, config):
         self.config = config
-        self.app = Application(config["homeserver_addr"], config["as_token"])
-        self.api = self.app.create_api()
-        # {"!source:room": [["@relayed:users"], ["@relayed:to.rooms"]]}
+        self.app = Application(config["homeserver_addr"], config["hs_token"])
+        self.api = self.app.Api()
+        # {"!source:room": [["@relayed:users"], ["!relayed:to.rooms"]]}
         # An empty list of users indicates all users relayed
         self.links = {}
         # "@real:username": MatrixUser("@as_user:domain")
         self.users = {}
 
-        self._process_links(config["relay"])
+        self._verify_links_format(config["links"])
+        self._process_links(config["links"])
         self.app.add_handlers(room_handler=self._handle_room,
                               user_handler=self._handle_user,
                               transaction_handler=self._handle_txn)
 
     def _process_links(self, links_dict):
         self.links.update(links_dict)
-        # Check for existence of users and rooms we're supposed to relay to
         for source_id, val in links_dict.items():
+            # Check for existence of objects for users and rooms to be relayed
             if val[0]:
                 unknown_users = (u for u in val[0] if u not in self.users)
                 for user_id in unknown_users:
                     self.users[user_id] = MatrixUser(
-                        mxid2localpart(user_id), self.app.create_api
+                        utils.mxid2localpart(user_id), self.app.Api
                     )
             # Empty list means that all users must be relayed
             else:
@@ -71,8 +58,14 @@ class ReqHandler:
                 unknown_users = (u for u in room.members if u not in self.users)
                 for user_id in unknown_users:
                     self.users[user_id] = MatrixUser(
-                        mxid2localpart(user_id), self.app.create_api
+                        utils.mxid2localpart(user_id), self.app.Api
                     )
+
+            # TODO: Check existence of source room
+
+    def _verify_links_format(self, links_dict):
+        # TODO: should raise error if bad format
+        pass
 
     def _handle_room(room_id):
         return False
@@ -81,4 +74,5 @@ class ReqHandler:
         return False
 
     def _handle_txn(event_stream):
+        # TODO
         return True
