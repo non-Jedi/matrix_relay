@@ -30,36 +30,36 @@ class ReqHandler:
         self.config = config
         self.app = Application(config["homeserver_addr"], config["hs_token"])
         self.api = self.app.Api()
-        # {"!source:room": [["@relayed:users"], ["!relayed:to.rooms"]]}
-        # An empty list of users indicates all users relayed
+        # {"!source:room": {"@ex:user": ["!relayed:to.rooms"]}}
+        # An empty string indicates all users relayed
         self.links = {}
-        # "@real:username": MatrixUser("@as_user:domain")
+        # {"@real:username": {"!room:id": MatrixRoom}}
         self.users = {}
 
-        self._verify_links_format(config["links"])
         self._process_links(config["links"])
         self.app.add_handlers(room_handler=self._handle_room,
                               user_handler=self._handle_user,
                               transaction_handler=self._handle_txn)
 
     def _process_links(self, links_dict):
+        self._verify_links_format(links_dict)
+        # TODO: what if already relaying from a room?
         self.links.update(links_dict)
-        for source_id, val in links_dict.items():
-            # Check for existence of objects for users and rooms to be relayed
-            if val[0]:
-                unknown_users = (u for u in val[0] if u not in self.users)
-                for user_id in unknown_users:
-                    self.users[user_id] = MatrixUser(
-                        utils.mxid2localpart(user_id), self.app.Api
-                    )
-            # Empty list means that all users must be relayed
-            else:
-                room = MatrixRoom(source_id, self.api)
-                unknown_users = (u for u in room.members if u not in self.users)
-                for user_id in unknown_users:
-                    self.users[user_id] = MatrixUser(
-                        utils.mxid2localpart(user_id), self.app.Api
-                    )
+        for source_room_id, user_dict in links_dict.items():
+            for user_id in user_dict:
+                if user_id and user_id not in self.users:
+                    for room_id in user_dict[user_id]:
+                        a = self.app.Api(identity=utils.mxid2localpart(user_id))
+                        rm = MatrixRoom(room_id, a)
+                        self.users[user_id][room_id] = rm
+                # Empty list means that all users must be relayed
+                elif not user_id:
+                    room = MatrixRoom(source_room_id, self.api)
+                    unknown_users = (u for u in room.members if u not in self.users)
+                    for user_id in unknown_users:
+                        self.users[user_id] = MatrixUser(
+                            utils.mxid2localpart(user_id), self.app.Api
+                        )
 
             # TODO: Check existence of source room
 
@@ -67,12 +67,22 @@ class ReqHandler:
         # TODO: should raise error if bad format
         pass
 
-    def _handle_room(room_id):
+    def _handle_room(self, room_id):
         return False
 
-    def _handle_user(user_id):
+    def _handle_user(self, user_id):
         return False
 
-    def _handle_txn(event_stream):
+    def _handle_txn(self, event_stream):
         # TODO
+        for event in event_stream:
+            if (
+                event.id in self.links and
+                event.type == "m.room.message" and
+                event.mxid in self.links[event.id]
+            ):
+                for user_id in self.links[event.id]:
+                    for dest_room_id in self.links[event.id][user_id]:
+                        rm = self.users[user_id][dest_room_id]
+                        rm.send_notice(event.content["body"])
         return True

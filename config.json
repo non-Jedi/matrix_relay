@@ -21,8 +21,10 @@
 
 	"homeserver_addr": "https://localhost:8448",
 	"links": {
-		"!foo:bar": [["@ex:user", "@bar:foo"], ["!bar:example.com", "!bar:fo"]],
-		"!all:users.relayed": [[], ["!to:this.room"]]
+		"!foo:bar": {
+			"@ex:user": ["!bar:example.com", "!bar:fo"],
+		  "": ["!all:usersrelayed.here"]
+		}
 	},
 	"user_prefix": "_relay_"
 }
